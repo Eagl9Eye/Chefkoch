@@ -1,0 +1,25 @@
+{
+  "name": "chefkoch",
+  "version": "1.0.0",
+  "description": "Discord-Bot to manage your meal creation ideas.",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eagl9Eye/Chefkoch.git"
+  },
+  "keywords": [
+    "meal"
+  ],
+  "author": "Eagl9Eye",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Eagl9Eye/Chefkoch/issues"
+  },
+  "homepage": "https://github.com/Eagl9Eye/Chefkoch#readme",
+  "dependencies": {
+    "discord.js": "^12.5.1"
+  }
+}
