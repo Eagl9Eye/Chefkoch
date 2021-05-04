@@ -109,10 +109,8 @@ class Barkeeper {
       if (this.status === Status.NONE) rej(BAR_NOT_OPEN);
       if (!expected || this.status != Status.FINISH) rej(GUESS_NOT_COLLECTED);
       else {
-        calcPlace(expected, this.rounds[this.currentRound]).then((scr) => {
-          this.update(Status.BAR);
-          res(scr);
-        });
+        this.update(Status.BAR);
+        res(calcPlace(expected, this.rounds[this.currentRound]));
       }
     });
   }
@@ -162,18 +160,16 @@ class Barkeeper {
 }
 
 function calcPlace(expected, round) {
-  return Promise.all(
-    round
-      .sort((a, b) => {
-        return (
-          Math.abs(a.guess - parseInt(expected)) >
-          Math.abs(b.guess - parseInt(expected))
-        );
-      })
-      .map((cur, ind) => {
-        return { ...cur, place: ind + 1 };
-      })
-  );
+  return round
+    .sort((a, b) => {
+      return (
+        Math.abs(a.guess - parseInt(expected)) >
+        Math.abs(b.guess - parseInt(expected))
+      );
+    })
+    .map((cur, ind) => {
+      return { ...cur, place: ind + 1 };
+    });
 }
 
 module.exports = { Barkeeper: Barkeeper, Status: Status };
