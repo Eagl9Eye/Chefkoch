@@ -2,11 +2,19 @@ const ChannelListener = require("./types/ChannelListener");
 const { Barkeeper, Status } = require("./types/Barkeeper");
 const Discord = require("discord.js");
 const { BOT_TOKEN } = require("../config/discord.json");
-const { icon, prefix } = require("../config/config.json");
+const { prefix } = require("../config/config.json");
+const {
+  sendEmbed,
+  guessEmbed,
+  scoreEmbed,
+  ruleEmbed,
+  commandEmbed,
+} = require("./embeds");
 
 const client = new Discord.Client();
 const processor = new ChannelListener(prefix);
 const barkeeper = new Barkeeper(client);
+var token = {}; // unterbrechen der aktuellen sammlung
 
 console.log("Discord-Bot is running!");
 
@@ -23,26 +31,7 @@ processor
   .addAlias("h")
   .addDesc("Zeigt dir alle Befehle und deren Beschreibung")
   .with((msg, par) => {
-    msg.channel.send(
-      new Discord.MessageEmbed()
-        .setColor("#0099ff")
-        .setTitle("Hier sind alle Befehle aufgelistet")
-        .attachFiles([icon])
-        .setThumbnail("attachment://icon.png")
-        .addFields(
-          processor.commands.map(({ name, desc, aliases }) => {
-            var commandname = name;
-            return {
-              name: `! ${commandname}${
-                aliases.length != 0 ? ` (${aliases})` : ""
-              }`,
-              value: `${desc.text} ${
-                desc.param ? `\nParameter: ${desc.param}` : ""
-              }`,
-            };
-          })
-        )
-    );
+    sendEmbed(processor.commands, commandEmbed, [msg.channel]);
   });
 
 processor
@@ -50,12 +39,10 @@ processor
   .addAlias("start")
   .addDesc("Wenn du die Party starten Willst")
   .with((msg, par) => {
-    if (barkeeper.status != Status.BAR) {
-      barkeeper.update(Status.BAR);
-      msg.reply("Die Bar wurde geöffnet");
-    } else {
-      msg.reply("Die Bar ist bereits offen");
-    }
+    barkeeper
+      .open()
+      .then((message) => msg.react("🖐"))
+      .catch((message) => msg.reply(message));
   });
 
 processor
@@ -63,8 +50,10 @@ processor
   .addAlias("dc")
   .addDesc("Wenn du die Party beenden willst")
   .with((msg, par) => {
-    barkeeper.update(Status.NONE);
-    msg.reply("Die Bar wurde geschlossen");
+    barkeeper
+      .close()
+      .then((message) => msg.react("🤏"))
+      .catch((message) => msg.reply(message));
   });
 
 processor
@@ -75,9 +64,18 @@ processor
     barkeeper
       .join(msg.author)
       .then((member) => member.send("Willkommen an der Bar"))
-      .catch((e) => {
-        msg.reply("Die Bar ist leider nicht geöffnet");
-      })
+      .catch((message) => msg.reply(message))
+  );
+
+processor
+  .register("leave")
+  .addAlias("l")
+  .addDesc("Wenn du den Tresen verlassen möchstest")
+  .with((msg, par) =>
+    barkeeper
+      .leave(msg.author)
+      .then((member) => member.send("Bis zum nächsten Mal"))
+      .catch((message) => msg.reply(message))
   );
 
 processor
@@ -87,10 +85,10 @@ processor
   .addParamdesc("Name des unerwünschten Gastes")
   .with((msg, par) => {
     barkeeper
-      .disconnect(par.join(" "))
-      .then(({ username }) => {
+      .kick(par.join(" "))
+      .then((kicked) => {
         msg.react("👢");
-        msg.reply(`${username} wurde von der Bar entfernt`);
+        msg.reply(`${kicked.client.username} wurde von der Bar entfernt`);
       })
       .catch((name) => msg.reply(`${name} ist nicht an der Bar!`));
   });
@@ -100,16 +98,29 @@ processor
   .addAlias("r")
   .addDesc("Um eine neue Runde einzuleuten")
   .with((msg, par) => {
-    msg.react("⏱");
+    // verbleibende Zeit als react anhaengen
     barkeeper
-      .startRound()
-      .then((embed) => {
-        barkeeper.sendToAll(embed);
-        msg.channel.send(embed);
+      .startRound(token)
+      .then((guesses) => {
+        barkeeper.addRound(guesses);
+        sendEmbed(guesses, guessEmbed, [msg.channel, barkeeper]);
       })
       .catch((message) => {
+        console.log("errorMessage:", message);
         msg.reply(message);
       });
+  });
+
+processor
+  .register("force quit")
+  .addAlias("fq")
+  .addDesc("Eine Runde direkt beenden")
+  .with((msg, par) => {
+    if (token.cancel) {
+      token.cancel();
+      msg.react("👮‍♂️");
+      token = {};
+    }
   });
 
 processor
@@ -120,9 +131,8 @@ processor
   .with((msg, par) => {
     barkeeper
       .endRound(par[0])
-      .then((embed) => {
-        barkeeper.sendToAll(embed);
-        msg.channel.send(embed);
+      .then((result) => {
+        sendEmbed(result, scoreEmbed, [msg.channel, barkeeper]);
       })
       .catch((message) => {
         msg.reply(message);
@@ -134,15 +144,7 @@ processor
   .addDesc("Gibt dir die Regeln aus")
   .addParamdesc("Name des Spiels")
   .with((msg, par) => {
-    msg.channel.send(
-      new Discord.MessageEmbed()
-        .setColor("#0099ff")
-        .setTitle(`Regeln für ${par[0]}`)
-        .setAuthor("Barkeeper")
-        .attachFiles([icon])
-        .setThumbnail("attachment://icon.png")
-        .addFields()
-    );
+    sendEmbed(["Diggah"], ruleEmbed, [msg.channel]); // TODO add rules
   });
 
 client.on("message", (m) => processor.handle(m));

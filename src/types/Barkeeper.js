@@ -1,13 +1,19 @@
 const Besoffski = require("./Besoffski");
-const Discord = require("discord.js");
 const Status = {
   NONE: "NONE", // Initial
   BAR: "BAR", // Eine neue Runde kann gestartet werden
   WAITING: "WARTET", // Guesses wurden gesammelt und auf das Ende warten
   FINISH: "FINISH",
-  UNKNOWN: "",
 };
-const { icon } = require("../../config/config.json");
+const {
+  BAR_OPEN,
+  BAR_OPENED,
+  BAR_WORKING,
+  BAR_CLOSED,
+  BAR_NOT_OPEN,
+  GUESS_NOT_COLLECTED,
+  GUESS_COLLECTED,
+} = require("./Messages");
 
 class Barkeeper {
   constructor(bot) {
@@ -17,68 +23,113 @@ class Barkeeper {
     this.members = [];
     this.rounds = [];
   }
-  join(client) {
+  open() {
     return new Promise((res, rej) => {
-      if (this.status != Status.BAR) rej(client);
-      let newMember = this.searchMembers(client.id);
-      if (!newMember) {
-        newMember = new Besoffski(this.bot, client);
-        this.members.push(newMember);
+      if ([Status.WAITING, Status.FINISH, Status.BAR].includes(this.status))
+        rej(BAR_OPEN);
+      else {
+        this.update(Status.BAR);
+        res(BAR_OPENED);
       }
-      res(newMember);
     });
   }
-  startRound() {
+  close() {
     return new Promise((res, rej) => {
-      if (this.status === Status.WAITING) rej("Es läuft gerade eine Runde");
-      if (this.status != Status.BAR && this.status != Status.FINISH) {
-        rej("Die Bar ist leider nicht geöffnet");
-      } else {
+      if (this.status === Status.WAITING) rej(BAR_WORKING);
+      else {
+        this.update(Status.NONE);
+        res(BAR_CLOSED);
+      }
+    });
+  }
+  join(client) {
+    return new Promise((res, rej) => {
+      if (this.status === Status.NONE) rej(BAR_NOT_OPEN);
+      else {
+        let newMember = this.searchId(client.id);
+        if (!newMember) {
+          newMember = new Besoffski(this.bot, client);
+          this.members.push(newMember);
+          res(newMember);
+        }
+        rej(`${newMember.client.username} ist schon an der Bar!`);
+      }
+    });
+  }
+  leave(client) {
+    return new Promise((res, rej) => {
+      if (this.status === Status.WAITING) rej(GUESS_NOT_COLLECTED);
+      else {
+        const left = this.disconnect(client.id);
+        !left ? rej(`${client.username} ist nicht an der Bar!`) : res(left);
+      }
+    });
+  }
+  kick(name) {
+    return new Promise((res, rej) => {
+      if (!name) rej("Unbekannt");
+      else {
+        const removed = this.disconnect(name);
+        !removed ? rej(name) : res(removed);
+      }
+    });
+  }
+  addRound(round) {
+    this.update(Status.FINISH);
+    this.rounds[++this.currentRound] = round;
+  }
+  startRound(token = {}) {
+    return new Promise((res, rej) => {
+      if (this.status === Status.WAITING) rej(BAR_WORKING);
+      if (![Status.BAR, Status.FINISH].includes(this.status)) rej(BAR_NOT_OPEN);
+      else {
         this.update(Status.WAITING);
-        Promise.all(
-          this.members.map((member) => {
-            member.send("Dein Tipp für die nächste Runde:");
-            return member.collectGuess();
-          })
-        ).then((guesses) => {
-          this.update(Status.FINISH);
-          this.rounds[++this.currentRound] = guesses;
-          res(guessEmbed(guesses));
-        });
+        res(
+          Promise.all(
+            this.members.map((member) => {
+              member.send("Dein Tipp für die nächste Runde:");
+              return member.collectGuess(token);
+            })
+          )
+        );
+      }
+    });
+  }
+  forceEnd(currentCollection) {
+    return new Promise((res, rej) => {
+      if (this.status === Status.NONE) rej(BAR_NOT_OPEN);
+      if (this.status != Status.FINISH) rej(GUESS_COLLECTED);
+      else {
+        currentCollection.cancel();
       }
     });
   }
   endRound(expected) {
     return new Promise((res, rej) => {
-      if (!expected || this.status != Status.FINISH)
-        rej("Der Barkeeper hat noch nicht alle Stimmen eingesammelt");
-      calcPlace(expected, this.rounds[this.currentRound]).then((scr) => {
-        this.update(Status.BAR);
-        res(scoreEmbed(scr));
-      });
+      if (this.status === Status.NONE) rej(BAR_NOT_OPEN);
+      if (!expected || this.status != Status.FINISH) rej(GUESS_NOT_COLLECTED);
+      else {
+        calcPlace(expected, this.rounds[this.currentRound]).then((scr) => {
+          this.update(Status.BAR);
+          res(scr);
+        });
+      }
     });
   }
-  disconnect(name) {
-    return new Promise((res, rej) => {
-      if (!name) rej("Unbekannt");
-      this.members.filter(({ client }, i) => {
-        if (client.username === name) {
-          // der name wird nicht vom server sondern vom discord client genommen
-          this.sendTo(client, "Du wurdest aus der Bar geschmissen");
-          this.members.splice(i, 1);
-          res(client);
-        }
-      });
-      rej(name);
+  disconnect(signature) {
+    return this.members.find(({ client }, index) => {
+      if (client.username === signature || client.id === signature) {
+        return this.members.splice(index, 1);
+      }
     });
   }
   sendTo(member, message) {
-    this.searchMembers(member.id).send(message);
+    this.searchId(member.id).send(message);
   }
-  sendToAll(message) {
+  send(message) {
     this.members.forEach((member) => member.send(message));
   }
-  searchMembers(id) {
+  searchId(id) {
     return this.members.find((member) => member.client.id === id);
   }
   update(newState) {
@@ -108,42 +159,6 @@ class Barkeeper {
         break;
     }
   }
-}
-
-function guessEmbed(guesses) {
-  return new Discord.MessageEmbed()
-    .setColor("#0099ff")
-    .setTitle("Hier sind die Schätzungen")
-    .setAuthor("Barkeeper")
-    .attachFiles([icon])
-    .setThumbnail("attachment://icon.png")
-    .addFields(
-      guesses.map((guess) => {
-        return {
-          name: guess.name,
-          value: guess.guess <= 0 ? `Keine Schätzung` : `${guess.guess}€`,
-          inline: true,
-        };
-      })
-    );
-}
-
-function scoreEmbed(score) {
-  return new Discord.MessageEmbed()
-    .setColor("#0099ff")
-    .setTitle("Die Ergebnisse der letzten Runde")
-    .setAuthor("Barkeeper")
-    .attachFiles([icon])
-    .setThumbnail("attachment://icon.png")
-    .addFields(
-      score.map((ele, ind) => {
-        return {
-          name: (ind === 0 ? "👑 " : "") + ele.place + ". " + ele.name,
-          value: ele.guess <= 0 ? `Keine Schätzung` : `${ele.guess}€`,
-          inline: true,
-        };
-      })
-    );
 }
 
 function calcPlace(expected, round) {

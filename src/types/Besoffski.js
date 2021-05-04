@@ -1,5 +1,6 @@
 const ClientChannel = require("./ClientChannel");
 const { bar } = require("../../config/config.json");
+const { random } = require("./../utils");
 
 class Besoffski extends ClientChannel {
   constructor(barkeeper, client) {
@@ -8,7 +9,7 @@ class Besoffski extends ClientChannel {
   send(msg) {
     this.handle((dm) => dm.send(msg));
   }
-  collectGuess() {
+  collectGuess(token) {
     return new Promise((res, rej) => {
       this.handle((dm) => {
         const collector = dm.createMessageCollector(
@@ -17,22 +18,24 @@ class Besoffski extends ClientChannel {
         );
         collector.on("collect", (msg) => {
           res({
+            client: this.client,
             guess: parseInt(msg.content),
-            name: this.client.username,
-            id: this.client.id,
           });
         });
         collector.on("end", (e, reason) => {
           switch (reason) {
             case "close":
               dm.send("Der Barkeeper schließt die Runde");
+              res({
+                client: this.client,
+                guess: random(1, 10001),
+              });
               break;
             case "time":
               dm.send("Die Zeit zum schätzen ist vorbei");
               res({
-                guess: Number.MIN_VALUE,
-                name: this.client.username,
-                id: this.client.id,
+                client: this.client,
+                guess: Number.MIN_SAFE_INTEGER,
               });
               break;
             case "limit":
@@ -44,6 +47,9 @@ class Besoffski extends ClientChannel {
               );
           }
         });
+        token.cancel = () => {
+          collector.stop("close");
+        };
       });
     });
   }
