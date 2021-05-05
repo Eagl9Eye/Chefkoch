@@ -47,9 +47,12 @@ class Besoffski extends ClientChannel {
               );
           }
         });
-        token.cancel = () => {
-          collector.stop("close");
-        };
+        token.push({
+          id: this.client,
+          cancel: () => {
+            collector.stop("close");
+          },
+        });
       });
     });
   }

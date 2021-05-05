@@ -44,8 +44,9 @@ function ruleEmbed(rules) {
 function scoreEmbed(score) {
   return commonEmbed()
     .setTitle("Die Ergebnisse der letzten Runde")
+    .setDescription(`Der richtige Preis war: ${score.actual}€`)
     .addFields(
-      score.map((ele, ind) => {
+      score.places.map((ele, ind) => {
         return {
           name:
             (ind === 0 ? "👑 " : "") + ele.place + ". " + ele.client.username,

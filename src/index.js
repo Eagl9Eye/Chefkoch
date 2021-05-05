@@ -14,7 +14,6 @@ const {
 const client = new Discord.Client();
 const processor = new ChannelListener(prefix);
 const barkeeper = new Barkeeper(client);
-var token = {}; // unterbrechen der aktuellen sammlung
 
 console.log("Discord-Bot is running!");
 
@@ -100,15 +99,12 @@ processor
   .with((msg, par) => {
     // verbleibende Zeit als react anhaengen
     barkeeper
-      .startRound(token)
+      .startRound()
       .then((guesses) => {
         barkeeper.addRound(guesses);
         sendEmbed(guesses, guessEmbed, [msg.channel, barkeeper]);
       })
-      .catch((message) => {
-        console.log("errorMessage:", message);
-        msg.reply(message);
-      });
+      .catch((message) => msg.reply(message));
   });
 
 processor
@@ -116,11 +112,10 @@ processor
   .addAlias("fq")
   .addDesc("Eine Runde direkt beenden")
   .with((msg, par) => {
-    if (token.cancel) {
-      token.cancel();
-      msg.react("👮‍♂️");
-      token = {};
-    }
+    barkeeper
+      .forceEnd()
+      .then(() => msg.react("👮‍♂️"))
+      .catch((message) => msg.reply(message));
   });
 
 processor
@@ -131,12 +126,13 @@ processor
   .with((msg, par) => {
     barkeeper
       .endRound(par[0])
-      .then((result) => {
-        sendEmbed(result, scoreEmbed, [msg.channel, barkeeper]);
-      })
-      .catch((message) => {
-        msg.reply(message);
-      });
+      .then((result) =>
+        sendEmbed({ places: [...result], actual: par[0] }, scoreEmbed, [
+          msg.channel,
+          barkeeper,
+        ])
+      )
+      .catch((message) => msg.reply(message));
   });
 
 processor

@@ -6,6 +6,7 @@ const Message = {
   BAR_CLOSED: "Die Bar wurde geschlossen",
   GUESS_NOT_COLLECTED: "Der Barkeeper hat noch nicht alle Stimmen eingesammelt",
   GUESS_COLLECTED: "Alle Stimmen wurden eingesammelt",
+  NOT_CANCELLABLE: "Konnte nicht beendet werden",
 };
 
 module.exports = Message;

@@ -13,6 +13,7 @@ const {
   BAR_NOT_OPEN,
   GUESS_NOT_COLLECTED,
   GUESS_COLLECTED,
+  NOT_CANCELLABLE,
 } = require("./Messages");
 
 class Barkeeper {
@@ -22,6 +23,7 @@ class Barkeeper {
     this.status = Status.NONE;
     this.members = [];
     this.rounds = [];
+    this.token = [];
   }
   open() {
     return new Promise((res, rej) => {
@@ -78,7 +80,7 @@ class Barkeeper {
     this.update(Status.FINISH);
     this.rounds[++this.currentRound] = round;
   }
-  startRound(token = {}) {
+  startRound() {
     return new Promise((res, rej) => {
       if (this.status === Status.WAITING) rej(BAR_WORKING);
       if (![Status.BAR, Status.FINISH].includes(this.status)) rej(BAR_NOT_OPEN);
@@ -88,19 +90,22 @@ class Barkeeper {
           Promise.all(
             this.members.map((member) => {
               member.send("Dein Tipp für die nächste Runde:");
-              return member.collectGuess(token);
+              return member.collectGuess(this.token);
             })
           )
         );
       }
     });
   }
-  forceEnd(currentCollection) {
+  forceEnd() {
     return new Promise((res, rej) => {
       if (this.status === Status.NONE) rej(BAR_NOT_OPEN);
-      if (this.status != Status.FINISH) rej(GUESS_COLLECTED);
+      if (this.status != Status.WAITING) rej(GUESS_COLLECTED);
+      if (this.token.length === 0) rej(NOT_CANCELLABLE);
       else {
-        currentCollection.cancel();
+        this.token.forEach((token) => token.cancel());
+        this.token = [];
+        res();
       }
     });
   }
@@ -163,7 +168,7 @@ function calcPlace(expected, round) {
   return round
     .sort((a, b) => {
       return (
-        Math.abs(a.guess - parseInt(expected)) >
+        Math.abs(a.guess - parseInt(expected)) -
         Math.abs(b.guess - parseInt(expected))
       );
     })
