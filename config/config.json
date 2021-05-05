@@ -1,0 +1,5 @@
+{
+  "prefix": "!",
+  "icon": "./res/icon.png",
+  "bar": { "voteTimer": 600000 }
+}
